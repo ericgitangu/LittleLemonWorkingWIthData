@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.room.Room
 import com.example.littlelemon.ui.theme.LittleLemonTheme
+import com.google.gson.Gson
+import com.google.gson.JsonParser
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
@@ -46,10 +48,11 @@ class MainActivity : ComponentActivity() {
     private val httpClient = HttpClient(Android) {
         install(ContentNegotiation) {
             json(
-                contentType = ContentType.Application.Json,
+                contentType = ContentType("text", "plain"),
                 json = Json {
                     ignoreUnknownKeys = true
                     isLenient = true
+                    prettyPrint = true
                 }
             )
         }
@@ -95,7 +98,7 @@ class MainActivity : ComponentActivity() {
                             .wrapContentWidth()
                             .align(CenterHorizontally)
                     ) {
-                        Text(text = "Tap to order by name.")
+                        Text(text = if (orderMenuItems) "Order by price" else "Order by name")
                     }
 
                     // add searchPhrase variable here
@@ -123,7 +126,12 @@ class MainActivity : ComponentActivity() {
                         })
                     } else {
                         // add menuItems variable here
-                        MenuItemsList(menuItems)
+                        MenuItemsList(menuItems.sortedByDescending { it.price }.filter {
+                            it.title.contains(
+                                searchPhrase,
+                                ignoreCase = true
+                            )
+                        })
                     }
                 }
             }
@@ -140,16 +148,10 @@ class MainActivity : ComponentActivity() {
     private suspend fun fetchMenu(): List<MenuItemNetwork> {
         val endpoint =
             "https://raw.githubusercontent.com/Meta-Mobile-Developer-PC/Working-With-Data-API/main/littleLemonSimpleMenu.json"
-        val menuItemNetworkItems: List<MenuItemNetwork> = httpClient.get(endpoint).body()
-        val json = Json {
-            isLenient = true
-        }
-        return listOf(
-            json.decodeFromString(
-                MenuItemNetwork.serializer(),
-                menuItemNetworkItems.toString()
-            )
-        )
+        return JsonParser.parseString(httpClient.get(endpoint).body())
+            .asJsonObject["menu"]
+            .asJsonArray
+            .map { Gson().fromJson(it, MenuItemNetwork::class.java) }
     }
 
     private fun saveMenuToDatabase(menuItemsNetwork: List<MenuItemNetwork>) {
